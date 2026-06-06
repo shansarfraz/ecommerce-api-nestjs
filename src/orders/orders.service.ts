@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -19,9 +21,16 @@ import {
   ReturnOrderDto,
   ReviewReturnDto,
 } from './dto/order.dto';
+import {
+  PAYMENT_PROVIDER,
+  PaymentProvider,
+} from '../payments/providers/payment-provider.interface';
+import { Payment } from '../payments/entities/payment.entity';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @InjectRepository(Order)
     private ordersRepository: Repository<Order>,
@@ -33,6 +42,7 @@ export class OrdersService {
     private vendorsRepository: Repository<Vendor>,
     private readonly dataSource: DataSource,
     private readonly commissions: CommissionsService,
+    @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
   ) {}
 
   private async restoreStock(manager: any, orderId: string) {
@@ -156,6 +166,22 @@ export class OrdersService {
           paymentStatus: PaymentStatus.REFUNDED,
         });
       });
+
+      // Issue actual refund via payment provider
+      const payment = await this.dataSource.getRepository(Payment)
+        .findOne({ where: { orderId: rr.orderId } });
+      if (payment?.providerIntentId) {
+        try {
+          await this.paymentProvider.refund({
+            providerIntentId: payment.providerIntentId,
+            amount: rr.refundAmount ?? Number(rr.order.total),
+            reason: 'return_approved',
+          });
+        } catch (e) {
+          // Log but don't fail — the ledger is already reversed
+          this.logger.warn(`Refund provider call failed for order ${rr.orderId}: ${e}`);
+        }
+      }
     }
     return rr;
   }

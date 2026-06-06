@@ -78,17 +78,32 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const secondsLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
+      throw new UnauthorizedException(`Account locked. Try again in ${secondsLeft} seconds.`);
+    }
+
     const isPasswordValid = await bcrypt.compare(
       loginDto.password,
       user.passwordHash,
     );
 
     if (!isPasswordValid) {
+      const attempts = (user.failedLoginAttempts ?? 0) + 1;
+      const updates: Partial<User> = { failedLoginAttempts: attempts };
+      if (attempts >= 5) {
+        updates.lockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 min
+      }
+      await this.usersRepository.update(user.id, updates);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('Account is not active');
+    }
+
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await this.usersRepository.update(user.id, { failedLoginAttempts: 0, lockedUntil: null });
     }
 
     return this.generateTokens(user);

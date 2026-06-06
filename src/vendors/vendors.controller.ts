@@ -94,4 +94,13 @@ export class VendorsController {
     if (!vendor) throw new ForbiddenException('Not an approved vendor');
     return this.vendorsService.getAnalytics(vendor.id, days ? Number(days) : 30);
   }
+
+  @Post('vendor/connect/stripe')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Start Stripe Connect onboarding' })
+  async connectStripe(@CurrentUser('id') userId: string) {
+    return this.vendorsService.connectStripe(userId);
+  }
 }

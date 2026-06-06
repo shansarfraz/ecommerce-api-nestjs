@@ -183,4 +183,19 @@ export class ProductsController {
     }
     return this.productsService.removeVariant(productId, variantId, vendor.id);
   }
+
+  @Post('vendor/products/:id/images/upload-url')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get presigned S3 URL to upload a product image' })
+  async getImageUploadUrl(
+    @CurrentUser('id') userId: string,
+    @Param('id') productId: string,
+    @Query('contentType') contentType: string = 'image/jpeg',
+  ) {
+    const vendor = await this.productsService.getVendorByUserId(userId);
+    if (!vendor) throw new ForbiddenException('You are not an approved vendor');
+    return this.productsService.getImageUploadUrl(productId, vendor.id, contentType);
+  }
 }

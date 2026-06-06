@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as crypto from 'crypto';
+import { UploadsService } from '../uploads/uploads.service';
 import {
   Product,
   ProductVariant,
@@ -32,6 +34,7 @@ export class ProductsService {
     private imagesRepository: Repository<ProductImage>,
     @InjectRepository(Vendor)
     private vendorsRepository: Repository<Vendor>,
+    private readonly uploads: UploadsService,
   ) {}
 
   async create(vendorId: string, createProductDto: CreateProductDto) {
@@ -356,5 +359,13 @@ export class ProductsService {
     const product = await this.findOne(id);
     await this.productsRepository.delete(id);
     return { message: 'Product deleted permanently' };
+  }
+
+  async getImageUploadUrl(productId: string, vendorId: string, contentType: string) {
+    const product = await this.findOne(productId);
+    if (product.vendorId !== vendorId) throw new ForbiddenException('Not your product');
+    const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+    const key = `products/${productId}/${crypto.randomUUID()}.${ext}`;
+    return this.uploads.getPresignedUploadUrl({ key, contentType });
   }
 }

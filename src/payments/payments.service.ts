@@ -302,6 +302,37 @@ export class PaymentsService {
       totalPages: Math.ceil(total / limit),
     };
   }
+
+  async approveAndDisbursePayout(payoutId: string) {
+    const payout = await this.payoutsRepository.findOne({
+      where: { id: payoutId },
+      relations: ['vendor'],
+    });
+    if (!payout) throw new NotFoundException('Payout not found');
+    if (payout.status !== PayoutStatus.PENDING) throw new BadRequestException('Payout is not pending');
+
+    const vendor = payout.vendor;
+    if (!vendor.stripeAccountId) throw new BadRequestException('Vendor has not completed Stripe Connect onboarding');
+
+    let transferId: string | null = null;
+    const providerWithConnect = this.provider as any;
+    if (providerWithConnect.transferToVendor) {
+      const result = await providerWithConnect.transferToVendor({
+        stripeAccountId: vendor.stripeAccountId,
+        amount: Number(payout.amount),
+        currency: 'USD',
+        payoutId: payout.id,
+      });
+      transferId = result.transferId;
+    }
+
+    await this.payoutsRepository.update(payoutId, {
+      status: PayoutStatus.COMPLETED,
+      details: { ...(payout.details as any), transferId },
+    });
+
+    return { ...payout, status: PayoutStatus.COMPLETED, transferId };
+  }
 }
 
 function round2(n: number): number {

@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
+  Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -15,6 +17,10 @@ import {
   AdminUpdateVendorCommissionDto,
   VendorQueryDto,
 } from './dto/vendor.dto';
+import {
+  PAYMENT_PROVIDER,
+  PaymentProvider,
+} from '../payments/providers/payment-provider.interface';
 
 @Injectable()
 export class VendorsService {
@@ -24,6 +30,7 @@ export class VendorsService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private readonly dataSource: DataSource,
+    @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
   ) {}
 
   async apply(userId: string, applyVendorDto: ApplyVendorDto) {
@@ -159,6 +166,19 @@ export class VendorsService {
     return this.vendorsRepository.findOne({
       where: { ownerId: userId, status: VendorStatus.APPROVED },
     });
+  }
+
+  async connectStripe(userId: string) {
+    const vendor = await this.vendorsRepository.findOne({
+      where: { ownerId: userId, status: VendorStatus.APPROVED },
+      relations: ['owner'],
+    });
+    if (!vendor) throw new NotFoundException('Approved vendor not found');
+    const provider = this.paymentProvider as any;
+    if (!provider.createConnectAccount) throw new BadRequestException('Connect not supported by active payment driver');
+    const result = await provider.createConnectAccount({ vendorId: vendor.id, email: vendor.owner?.email ?? vendor.businessEmail });
+    await this.vendorsRepository.update(vendor.id, { stripeAccountId: result.accountId });
+    return { onboardingUrl: result.onboardingUrl, accountId: result.accountId };
   }
 
   async getStorefront(slug: string) {

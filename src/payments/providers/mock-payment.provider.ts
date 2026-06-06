@@ -81,6 +81,15 @@ export class MockPaymentProvider implements PaymentProvider {
     };
   }
 
+  async createConnectAccount(input: { vendorId: string; email: string }): Promise<{ accountId: string; onboardingUrl: string }> {
+    const accountId = `acct_mock_${crypto.randomBytes(8).toString('hex')}`;
+    return { accountId, onboardingUrl: `http://localhost:3000/mock-connect-onboarding?account=${accountId}` };
+  }
+
+  async transferToVendor(input: { stripeAccountId: string; amount: number; currency: string; payoutId: string }): Promise<{ transferId: string }> {
+    return { transferId: `tr_mock_${crypto.randomBytes(8).toString('hex')}` };
+  }
+
   /**
    * Verify an HMAC-SHA256 signature in the form `t=<unix>,v1=<hex>`,
    * computed over `<unix>.<rawBody>` with the shared webhook secret.

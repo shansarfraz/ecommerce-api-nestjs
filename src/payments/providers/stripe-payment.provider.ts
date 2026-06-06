@@ -86,6 +86,33 @@ export class StripePaymentProvider implements PaymentProvider {
     };
   }
 
+  async createConnectAccount(input: { vendorId: string; email: string; }): Promise<{ accountId: string; onboardingUrl: string }> {
+    this.assertStripe();
+    const account = await this.stripe.accounts.create({
+      type: 'express',
+      email: input.email,
+      metadata: { vendorId: input.vendorId },
+    });
+    const link = await this.stripe.accountLinks.create({
+      account: account.id,
+      refresh_url: this.config.get('STRIPE_CONNECT_REFRESH_URL', 'http://localhost:3000/vendor/connect/refresh'),
+      return_url: this.config.get('STRIPE_CONNECT_RETURN_URL', 'http://localhost:3000/vendor/connect/return'),
+      type: 'account_onboarding',
+    });
+    return { accountId: account.id, onboardingUrl: link.url };
+  }
+
+  async transferToVendor(input: { stripeAccountId: string; amount: number; currency: string; payoutId: string; }): Promise<{ transferId: string }> {
+    this.assertStripe();
+    const transfer = await this.stripe.transfers.create({
+      amount: Math.round(input.amount * 100),
+      currency: input.currency.toLowerCase(),
+      destination: input.stripeAccountId,
+      metadata: { payoutId: input.payoutId },
+    });
+    return { transferId: transfer.id };
+  }
+
   verifyWebhook(input: WebhookVerifyInput): WebhookEvent {
     if (!this.webhookSecret) throw new UnauthorizedException('Stripe webhook secret not configured');
     this.assertStripe();

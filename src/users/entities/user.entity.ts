@@ -64,6 +64,12 @@ export class User {
   @Column({ default: false })
   emailVerified: boolean;
 
+  @Column({ default: 0 })
+  failedLoginAttempts: number;
+
+  @Column({ nullable: true })
+  lockedUntil: Date;
+
   @CreateDateColumn()
   createdAt: Date;
 

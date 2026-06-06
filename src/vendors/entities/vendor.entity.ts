@@ -48,6 +48,9 @@ export class Vendor {
   status: VendorStatus;
 
   @Column({ nullable: true })
+  stripeAccountId: string;
+
+  @Column({ nullable: true })
   businessEmail: string;
 
   @Column({ nullable: true })

@@ -51,4 +51,6 @@ export interface PaymentProvider {
   confirmIntent(input: ConfirmIntentInput): Promise<PaymentIntentDto>;
   refund(input: RefundInput): Promise<RefundResult>;
   verifyWebhook(input: WebhookVerifyInput): WebhookEvent;
+  createConnectAccount?(input: { vendorId: string; email: string }): Promise<{ accountId: string; onboardingUrl: string }>;
+  transferToVendor?(input: { stripeAccountId: string; amount: number; currency: string; payoutId: string }): Promise<{ transferId: string }>;
 }

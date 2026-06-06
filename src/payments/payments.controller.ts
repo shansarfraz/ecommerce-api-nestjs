@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -121,5 +122,14 @@ export class PaymentsController {
       throw new ForbiddenException('You are not an approved vendor');
     }
     return this.paymentsService.requestPayout(vendor.id, dto);
+  }
+
+  @Patch('admin/payouts/:id/approve')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Approve and disburse vendor payout' })
+  async approvePayout(@Param('id') id: string) {
+    return this.paymentsService.approveAndDisbursePayout(id);
   }
 }
