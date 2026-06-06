@@ -11,6 +11,8 @@ import { DataSource, Repository } from 'typeorm';
 import { Order, OrderItem, OrderStatus, FulfillmentStatus, PaymentStatus } from './entities/order.entity';
 import { Shipment } from './entities/shipment.entity';
 import { ReturnRequest, ReturnStatus } from './entities/return-request.entity';
+import { OrderAdjustment, AdjustmentType } from './entities/order-adjustment.entity';
+import { OrderTimelineEvent, TimelineEventType } from './entities/order-timeline-event.entity';
 import { Vendor, VendorStatus } from '../vendors/entities/vendor.entity';
 import { Product, ProductVariant } from '../products/entities/product.entity';
 import { CommissionsService } from '../commissions/commissions.service';
@@ -22,6 +24,7 @@ import {
   CancelOrderDto,
   ReturnOrderDto,
   ReviewReturnDto,
+  CreateAdjustmentDto,
 } from './dto/order.dto';
 import {
   PAYMENT_PROVIDER,
@@ -42,6 +45,10 @@ export class OrdersService {
     private shipmentRepo: Repository<Shipment>,
     @InjectRepository(ReturnRequest)
     private returnRepo: Repository<ReturnRequest>,
+    @InjectRepository(OrderAdjustment)
+    private adjustmentRepo: Repository<OrderAdjustment>,
+    @InjectRepository(OrderTimelineEvent)
+    private timelineRepo: Repository<OrderTimelineEvent>,
     @InjectRepository(Vendor)
     private vendorsRepository: Repository<Vendor>,
     private readonly dataSource: DataSource,
@@ -359,6 +366,83 @@ export class OrdersService {
       notes: dto.notes,
     });
 
+    await this.logTimeline(orderId, TimelineEventType.STATUS_CHANGE,
+      `Status changed to ${dto.status}${dto.notes ? `: ${dto.notes}` : ''}`,
+      { actorRole: 'admin' },
+    );
+
     return this.findOneAdmin(orderId);
+  }
+
+  // Adjustments
+  async createAdjustment(orderId: string, dto: CreateAdjustmentDto, adminId: string) {
+    await this.findOneAdmin(orderId);
+
+    const adj = await this.adjustmentRepo.save(this.adjustmentRepo.create({
+      orderId,
+      type: dto.type,
+      amount: dto.amount,
+      label: dto.label,
+      note: dto.note,
+      createdByAdminId: adminId,
+    }));
+
+    const delta = dto.type === AdjustmentType.SURCHARGE ? dto.amount : -dto.amount;
+    await this.ordersRepository.increment({ id: orderId }, 'total', delta);
+
+    await this.logTimeline(orderId, TimelineEventType.ADJUSTMENT,
+      `${dto.type === AdjustmentType.SURCHARGE ? 'Surcharge' : 'Discount'} applied: ${dto.label} ($${dto.amount})`,
+      { actorId: adminId, actorRole: 'admin', metadata: { adjustmentId: adj.id, amount: dto.amount, type: dto.type } },
+    );
+
+    return adj;
+  }
+
+  async getAdjustments(orderId: string) {
+    await this.findOneAdmin(orderId);
+    return this.adjustmentRepo.find({ where: { orderId }, order: { createdAt: 'ASC' } });
+  }
+
+  async deleteAdjustment(orderId: string, adjustmentId: string, adminId: string) {
+    const adj = await this.adjustmentRepo.findOne({ where: { id: adjustmentId, orderId } });
+    if (!adj) throw new NotFoundException('Adjustment not found');
+
+    const delta = adj.type === AdjustmentType.SURCHARGE ? -Number(adj.amount) : Number(adj.amount);
+    await this.ordersRepository.increment({ id: orderId }, 'total', delta);
+    await this.adjustmentRepo.delete(adjustmentId);
+
+    await this.logTimeline(orderId, TimelineEventType.ADJUSTMENT,
+      `Adjustment removed: ${adj.label} ($${adj.amount})`,
+      { actorId: adminId, actorRole: 'admin' },
+    );
+
+    return { deleted: true };
+  }
+
+  // Timeline
+  async getTimeline(orderId: string) {
+    await this.findOneAdmin(orderId);
+    return this.timelineRepo.find({ where: { orderId }, order: { createdAt: 'ASC' } });
+  }
+
+  async addTimelineNote(orderId: string, note: string, actorId: string, actorRole: string) {
+    await this.findOneAdmin(orderId);
+    return this.logTimeline(orderId, TimelineEventType.NOTE, note, { actorId, actorRole });
+  }
+
+  private async logTimeline(
+    orderId: string,
+    eventType: TimelineEventType,
+    description: string,
+    opts: { actorId?: string; actorRole?: string; metadata?: Record<string, any> } = {},
+  ) {
+    await this.timelineRepo.save(this.timelineRepo.create({
+      orderId,
+      eventType,
+      description,
+      actorId: opts.actorId,
+      actorRole: opts.actorRole,
+      metadata: opts.metadata,
+    }));
   }
 }

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Query,
   Body,
@@ -23,6 +24,7 @@ import {
   CancelOrderDto,
   ReturnOrderDto,
   ReviewReturnDto,
+  CreateAdjustmentDto,
 } from './dto/order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -101,6 +103,65 @@ export class OrdersController {
   @ApiOperation({ summary: 'Approve or reject a return request' })
   async reviewReturn(@Param('returnId') returnId: string, @Body() dto: ReviewReturnDto) {
     return this.ordersService.adminReviewReturn(returnId, dto);
+  }
+
+  // Admin: order timeline
+  @Get('admin/orders/:id/timeline')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get order audit timeline' })
+  async getTimeline(@Param('id') id: string) {
+    return this.ordersService.getTimeline(id);
+  }
+
+  @Post('admin/orders/:id/timeline/notes')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add agent note to order timeline' })
+  async addNote(
+    @Param('id') id: string,
+    @Body('note') note: string,
+    @CurrentUser('id') adminId: string,
+  ) {
+    return this.ordersService.addTimelineNote(id, note, adminId, 'admin');
+  }
+
+  // Admin: order adjustments
+  @Post('admin/orders/:id/adjustments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add manual adjustment (discount or surcharge) to order' })
+  async createAdjustment(
+    @Param('id') id: string,
+    @Body() dto: CreateAdjustmentDto,
+    @CurrentUser('id') adminId: string,
+  ) {
+    return this.ordersService.createAdjustment(id, dto, adminId);
+  }
+
+  @Get('admin/orders/:id/adjustments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List adjustments for an order' })
+  async getAdjustments(@Param('id') id: string) {
+    return this.ordersService.getAdjustments(id);
+  }
+
+  @Delete('admin/orders/:id/adjustments/:adjustmentId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Remove an adjustment from an order' })
+  async deleteAdjustment(
+    @Param('id') id: string,
+    @Param('adjustmentId') adjustmentId: string,
+    @CurrentUser('id') adminId: string,
+  ) {
+    return this.ordersService.deleteAdjustment(id, adjustmentId, adminId);
   }
 
   // Vendor endpoints
