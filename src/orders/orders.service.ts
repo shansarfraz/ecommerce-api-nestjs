@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Order, OrderItem, OrderStatus, FulfillmentStatus, PaymentStatus } from './entities/order.entity';
+import { ReturnRequest, ReturnStatus } from './entities/return-request.entity';
 import { Vendor, VendorStatus } from '../vendors/entities/vendor.entity';
 import { Product, ProductVariant } from '../products/entities/product.entity';
 import { CommissionsService } from '../commissions/commissions.service';
@@ -16,6 +17,7 @@ import {
   UpdateFulfillmentStatusDto,
   CancelOrderDto,
   ReturnOrderDto,
+  ReviewReturnDto,
 } from './dto/order.dto';
 
 @Injectable()
@@ -25,6 +27,8 @@ export class OrdersService {
     private ordersRepository: Repository<Order>,
     @InjectRepository(OrderItem)
     private orderItemsRepository: Repository<OrderItem>,
+    @InjectRepository(ReturnRequest)
+    private returnRepo: Repository<ReturnRequest>,
     @InjectRepository(Vendor)
     private vendorsRepository: Repository<Vendor>,
     private readonly dataSource: DataSource,
@@ -111,22 +115,49 @@ export class OrdersService {
 
   async returnOrder(userId: string, orderId: string, dto: ReturnOrderDto) {
     const order = await this.findOneForUser(userId, orderId);
-
-    if (order.status !== OrderStatus.DELIVERED) {
-      throw new BadRequestException('Only delivered orders can be returned');
+    if (order.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException('Only paid orders can be returned');
     }
-
-    // Mark all items as returned
-    await this.orderItemsRepository.update(
-      { orderId },
-      { fulfillmentStatus: FulfillmentStatus.RETURNED },
-    );
-
-    await this.ordersRepository.update(orderId, {
-      notes: `Return requested: ${dto.reason}`,
+    const existing = await this.returnRepo.findOne({ where: { orderId } });
+    if (existing) {
+      throw new BadRequestException('A return request already exists for this order');
+    }
+    const rr = this.returnRepo.create({
+      orderId,
+      requestedById: userId,
+      reason: dto.reason,
+      status: ReturnStatus.REQUESTED,
     });
+    await this.returnRepo.save(rr);
+    return rr;
+  }
 
-    return this.findOneForUser(userId, orderId);
+  async getReturnRequest(userId: string, orderId: string) {
+    await this.findOneForUser(userId, orderId); // ownership check
+    return this.returnRepo.findOne({ where: { orderId } });
+  }
+
+  async adminReviewReturn(returnId: string, dto: ReviewReturnDto) {
+    const rr = await this.returnRepo.findOne({ where: { id: returnId }, relations: ['order'] });
+    if (!rr) throw new NotFoundException('Return request not found');
+    if (rr.status !== ReturnStatus.REQUESTED) throw new BadRequestException('Return already reviewed');
+
+    rr.status = dto.approve ? ReturnStatus.APPROVED : ReturnStatus.REJECTED;
+    rr.adminNotes = dto.notes ?? null;
+    rr.refundAmount = dto.refundAmount ?? Number(rr.order.total);
+    await this.returnRepo.save(rr);
+
+    if (dto.approve) {
+      await this.dataSource.transaction(async (manager) => {
+        await this.restoreStock(manager, rr.orderId);
+        await this.commissions.reverseForOrder(manager, rr.orderId);
+        await manager.getRepository(Order).update(rr.orderId, {
+          status: OrderStatus.REFUNDED,
+          paymentStatus: PaymentStatus.REFUNDED,
+        });
+      });
+    }
+    return rr;
   }
 
   // Vendor methods

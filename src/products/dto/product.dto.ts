@@ -8,6 +8,7 @@ import {
   IsArray,
   ValidateNested,
   IsObject,
+  IsBoolean,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -231,4 +232,14 @@ export class ProductQueryDto {
   @IsOptional()
   @Type(() => Number)
   limit?: number = 10;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  inStock?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  featured?: boolean;
 }

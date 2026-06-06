@@ -86,10 +86,17 @@ export class ProductsService {
       .where('product.status = :status', { status: ProductStatus.ACTIVE });
 
     if (q) {
-      queryBuilder.andWhere(
-        '(product.title ILIKE :q OR product.description ILIKE :q)',
-        { q: `%${q}%` },
-      );
+      if (q.length >= 3) {
+        queryBuilder.andWhere(
+          `to_tsvector('english', coalesce(product.title,'') || ' ' || coalesce(product.description,'')) @@ plainto_tsquery('english', :q)`,
+          { q },
+        );
+      } else {
+        queryBuilder.andWhere(
+          '(product.title ILIKE :q OR product.description ILIKE :q)',
+          { q: `%${q}%` },
+        );
+      }
     }
 
     if (category) {
@@ -106,6 +113,14 @@ export class ProductsService {
 
     if (maxPrice !== undefined) {
       queryBuilder.andWhere('product.basePrice <= :maxPrice', { maxPrice });
+    }
+
+    if (query.inStock === true) {
+      queryBuilder.andWhere('product.stock > 0');
+    }
+
+    if (query.featured === true) {
+      queryBuilder.andWhere('product.isFeatured = true');
     }
 
     switch (sort) {
@@ -295,10 +310,17 @@ export class ProductsService {
       .leftJoinAndSelect('product.category', 'category');
 
     if (q) {
-      queryBuilder.andWhere(
-        '(product.title ILIKE :q OR product.description ILIKE :q)',
-        { q: `%${q}%` },
-      );
+      if (q.length >= 3) {
+        queryBuilder.andWhere(
+          `to_tsvector('english', coalesce(product.title,'') || ' ' || coalesce(product.description,'')) @@ plainto_tsquery('english', :q)`,
+          { q },
+        );
+      } else {
+        queryBuilder.andWhere(
+          '(product.title ILIKE :q OR product.description ILIKE :q)',
+          { q: `%${q}%` },
+        );
+      }
     }
 
     if (category) {

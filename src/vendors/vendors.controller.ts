@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,7 +22,10 @@ import {
   VendorQueryDto,
 } from './dto/vendor.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('Vendors')
 @Controller('vendors')
@@ -75,5 +79,19 @@ export class VendorsController {
   @ApiResponse({ status: 404, description: 'Vendor not found' })
   async getBySlug(@Param('slug') slug: string) {
     return this.vendorsService.findBySlug(slug);
+  }
+
+  @Get('vendor/analytics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Vendor analytics — GMV, top products, earnings' })
+  async getAnalytics(
+    @CurrentUser('id') userId: string,
+    @Query('days') days?: number,
+  ) {
+    const vendor = await this.vendorsService.findVendorByUserId(userId);
+    if (!vendor) throw new ForbiddenException('Not an approved vendor');
+    return this.vendorsService.getAnalytics(vendor.id, days ? Number(days) : 30);
   }
 }

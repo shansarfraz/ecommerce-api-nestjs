@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Vendor, VendorStatus } from './entities/vendor.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import {
@@ -23,6 +23,7 @@ export class VendorsService {
     private vendorsRepository: Repository<Vendor>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async apply(userId: string, applyVendorDto: ApplyVendorDto) {
@@ -167,5 +168,54 @@ export class VendorsService {
     if (!vendor) throw new NotFoundException('Store not found');
     const { commissionRate, ...publicFields } = vendor as any;
     return publicFields;
+  }
+
+  async getAnalytics(vendorId: string, days: number = 30) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    // GMV: sum of order item subtotals for this vendor in period
+    const gmvRow = await this.dataSource.query(
+      `SELECT COALESCE(SUM(oi.subtotal), 0) as gmv, COUNT(DISTINCT oi."orderId") as orders
+       FROM order_items oi
+       JOIN orders o ON o.id = oi."orderId"
+       WHERE oi."vendorId" = $1 AND o."paymentStatus" = 'paid' AND o."createdAt" >= $2`,
+      [vendorId, since],
+    );
+
+    // Top products
+    const topProducts = await this.dataSource.query(
+      `SELECT oi."productId", p.title, SUM(oi.quantity) as units_sold, SUM(oi.subtotal) as revenue
+       FROM order_items oi
+       JOIN products p ON p.id = oi."productId"
+       JOIN orders o ON o.id = oi."orderId"
+       WHERE oi."vendorId" = $1 AND o."paymentStatus" = 'paid' AND o."createdAt" >= $2
+       GROUP BY oi."productId", p.title
+       ORDER BY revenue DESC
+       LIMIT 5`,
+      [vendorId, since],
+    );
+
+    // Commission summary
+    const commRow = await this.dataSource.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN status = 'available' THEN "netAmount" ELSE 0 END), 0) as available,
+         COALESCE(SUM(CASE WHEN status = 'paid' THEN "netAmount" ELSE 0 END), 0) as paid,
+         COALESCE(SUM("commissionAmount"), 0) as total_commission
+       FROM commission_entries
+       WHERE "vendorId" = $1 AND "createdAt" >= $2`,
+      [vendorId, since],
+    );
+
+    return {
+      period: { days, since },
+      gmv: Number(gmvRow[0]?.gmv ?? 0),
+      orders: Number(gmvRow[0]?.orders ?? 0),
+      topProducts,
+      earnings: {
+        available: Number(commRow[0]?.available ?? 0),
+        paid: Number(commRow[0]?.paid ?? 0),
+        totalCommission: Number(commRow[0]?.total_commission ?? 0),
+      },
+    };
   }
 }

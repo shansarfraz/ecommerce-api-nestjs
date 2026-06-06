@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsBoolean, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 import { OrderStatus, FulfillmentStatus } from '../entities/order.entity';
 
@@ -53,4 +53,20 @@ export class ReturnOrderDto {
   @ApiProperty()
   @IsString()
   reason: string;
+}
+
+export class ReviewReturnDto {
+  @ApiProperty()
+  @IsBoolean()
+  approve: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  refundAmount?: number;
 }

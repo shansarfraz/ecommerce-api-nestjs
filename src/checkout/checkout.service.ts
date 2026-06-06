@@ -14,7 +14,7 @@ import {
 } from '../orders/entities/order.entity';
 import { Product, ProductVariant } from '../products/entities/product.entity';
 import { User } from '../users/entities/user.entity';
-import { ApplyCouponDto, CreateSessionDto } from './dto/checkout.dto';
+import { ApplyCouponDto, CreateSessionDto, GuestSessionDto } from './dto/checkout.dto';
 import { PromotionsService } from '../promotions/promotions.service';
 import { ShippingService } from '../shipping/shipping.service';
 import { TaxService } from '../tax/tax.service';
@@ -394,6 +394,219 @@ export class CheckoutService {
         },
       });
     }
+
+    return {
+      orderId: order.id,
+      paymentIntentId: intent.providerIntentId,
+      clientSecret: intent.clientSecret,
+      total: order.total,
+      currency: order.currency,
+      status: order.status,
+    };
+  }
+
+  /**
+   * Guest checkout — no JWT required. The caller supplies a cartId so the
+   * service can look up the cart directly without a userId. A new order is
+   * created with userId = null and guestEmail set to dto.guestEmail.
+   */
+  async createGuestSession(dto: GuestSessionDto) {
+    if (dto.idempotencyKey) {
+      const existing = await this.ordersRepository.findOne({
+        where: { idempotencyKey: dto.idempotencyKey },
+      });
+      if (existing) {
+        const payment = await this.cartsRepository.manager
+          .getRepository(Payment)
+          .findOne({ where: { orderId: existing.id } });
+        return {
+          orderId: existing.id,
+          paymentIntentId: payment?.providerIntentId ?? null,
+          clientSecret: (payment?.metadata as any)?.clientSecret ?? null,
+          total: existing.total,
+          currency: existing.currency,
+          status: existing.status,
+        };
+      }
+    }
+
+    const cart = await this.cartsRepository.findOne({
+      where: { id: dto.cartId },
+      relations: ['items', 'items.product', 'items.variant', 'items.vendor'],
+    });
+    if (!cart || cart.items.length === 0) {
+      throw new BadRequestException('Cart is empty');
+    }
+
+    const address = dto.shippingAddress as any;
+    const groups = this.groupByVendor(cart.items);
+    const subtotal = round2(groups.reduce((s, g) => s + g.subtotal, 0));
+
+    // Shipping
+    const shippingByVendor = await Promise.all(
+      groups.map(async (g) => {
+        const q = await this.shipping.quote({
+          vendorId: g.vendorId,
+          subtotal: g.subtotal,
+          itemCount: g.itemCount,
+          country: address?.country,
+        });
+        return { vendorId: g.vendorId, ...q };
+      }),
+    );
+
+    const { order } = await this.dataSource.transaction(async (manager) => {
+      // 1. lock stock rows
+      const variantIds = cart.items
+        .map((i) => i.variantId)
+        .filter((v): v is string => !!v);
+      const productIds = cart.items.map((i) => i.productId);
+
+      if (variantIds.length) {
+        await manager
+          .getRepository(ProductVariant)
+          .createQueryBuilder('v')
+          .setLock('pessimistic_write')
+          .whereInIds(variantIds)
+          .getMany();
+      }
+      const lockedProducts = await manager
+        .getRepository(Product)
+        .createQueryBuilder('p')
+        .setLock('pessimistic_write')
+        .whereInIds(productIds)
+        .getMany();
+
+      // 2. verify + decrement
+      for (const item of cart.items) {
+        if (item.variantId) {
+          const variant = await manager
+            .getRepository(ProductVariant)
+            .findOne({ where: { id: item.variantId } });
+          if (!variant) {
+            throw new BadRequestException(`Variant not found: ${item.variantId}`);
+          }
+          if (variant.stock < item.quantity) {
+            throw new BadRequestException(`Insufficient stock for variant ${variant.name}`);
+          }
+          await manager
+            .getRepository(ProductVariant)
+            .update(variant.id, { stock: variant.stock - item.quantity });
+        } else {
+          const product = lockedProducts.find((p) => p.id === item.productId);
+          if (!product) {
+            throw new BadRequestException(`Product not found: ${item.productId}`);
+          }
+          if (product.stock < item.quantity) {
+            throw new BadRequestException(`Insufficient stock for ${product.title}`);
+          }
+          const newStock = product.stock - item.quantity;
+          await manager
+            .getRepository(Product)
+            .update(product.id, { stock: newStock });
+          if (newStock <= 5) {
+            await this.notifications.send({
+              template: 'product.low-stock',
+              to: 'admin@marketplace.com',
+              subject: `Low stock alert: ${product.title}`,
+              data: { productId: product.id, title: product.title, stock: newStock },
+            });
+          }
+        }
+      }
+
+      let totalShipping = round2(
+        shippingByVendor.reduce((s, q) => s + q.amount, 0),
+      );
+
+      // 3. discount (guest checkout: coupon previewed without a userId)
+      let discount = 0;
+      let freeShipping = false;
+      if (dto.couponCode) {
+        const res = await this.promotions.preview({
+          code: dto.couponCode,
+          userId: dto.guestEmail, // use email as surrogate; promotions service accepts any string
+          subtotal,
+          vendorIds: groups.map((g) => g.vendorId),
+        });
+        discount = res.discountAmount;
+        freeShipping = res.freeShipping;
+        if (freeShipping) totalShipping = 0;
+      }
+
+      const taxableAmount = Math.max(0, subtotal - discount);
+      const taxCalc = await this.tax.calculate(taxableAmount, address);
+
+      const total = round2(
+        Math.max(0, subtotal - discount) + totalShipping + taxCalc.amount,
+      );
+
+      // 4. order (userId is null for guests)
+      const order = manager.getRepository(Order).create({
+        userId: null as any,
+        guestEmail: dto.guestEmail,
+        status: OrderStatus.PENDING,
+        total,
+        currency: cart.currency,
+        paymentStatus: PaymentStatus.PENDING,
+        shippingAddress: dto.shippingAddress,
+        billingAddress: dto.billingAddress ?? dto.shippingAddress,
+        couponCode: dto.couponCode?.toUpperCase(),
+        discountAmount: discount,
+        shippingCost: totalShipping,
+        taxAmount: taxCalc.amount,
+        idempotencyKey: dto.idempotencyKey ?? null,
+      });
+      const savedOrder = await manager.getRepository(Order).save(order);
+
+      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      await manager.getRepository(Order).update(savedOrder.id, { orderNumber });
+      savedOrder.orderNumber = orderNumber;
+
+      const orderItems = cart.items.map((item) =>
+        manager.getRepository(OrderItem).create({
+          orderId: savedOrder.id,
+          productId: item.productId,
+          variantId: item.variantId,
+          vendorId: item.vendorId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal,
+        }),
+      );
+      await manager.getRepository(OrderItem).save(orderItems);
+
+      // 5. redeem coupon if provided (use guestEmail as userId surrogate)
+      if (dto.couponCode) {
+        await this.promotions.redeem(manager, {
+          code: dto.couponCode,
+          userId: dto.guestEmail,
+          orderId: savedOrder.id,
+          subtotal,
+          vendorIds: groups.map((g) => g.vendorId),
+        });
+      }
+
+      // 6. clear cart
+      await manager.getRepository(CartItem).delete({ cartId: cart.id });
+      await manager.getRepository(Cart).update(cart.id, { total: 0 });
+
+      return { order: savedOrder };
+    });
+
+    // 7. payment intent (outside the tx)
+    const intent = await this.payments.createIntentForOrder(order, dto.guestEmail);
+
+    await this.notifications.send({
+      template: 'order.placed',
+      to: dto.guestEmail,
+      subject: `Order ${order.id} placed`,
+      data: {
+        orderId: order.id,
+        total: order.total,
+        currency: order.currency,
+      },
+    });
 
     return {
       orderId: order.id,

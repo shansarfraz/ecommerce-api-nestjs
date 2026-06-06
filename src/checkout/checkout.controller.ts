@@ -9,6 +9,7 @@ import { CheckoutService } from './checkout.service';
 import {
   ApplyCouponDto,
   CreateSessionDto,
+  GuestSessionDto,
   SummaryQueryDto,
 } from './dto/checkout.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -16,12 +17,12 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Checkout')
 @Controller('checkout')
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
 
   @Post('summary')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get checkout summary grouped by vendor' })
   @ApiResponse({ status: 200, description: 'Checkout summary retrieved' })
   async getSummary(
@@ -36,6 +37,8 @@ export class CheckoutController {
   }
 
   @Post('apply-coupon')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Apply promo code to checkout' })
   @ApiResponse({ status: 200, description: 'Coupon applied' })
   @ApiResponse({ status: 400, description: 'Invalid coupon code' })
@@ -47,6 +50,8 @@ export class CheckoutController {
   }
 
   @Post('remove-coupon')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Remove promo code from checkout' })
   @ApiResponse({ status: 200, description: 'Coupon removed' })
   async removeCoupon(@CurrentUser('id') userId: string) {
@@ -54,6 +59,8 @@ export class CheckoutController {
   }
 
   @Post('create-session')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Create payment session and order' })
   @ApiResponse({ status: 201, description: 'Payment session created' })
   async createSession(
@@ -61,5 +68,12 @@ export class CheckoutController {
     @Body() createSessionDto: CreateSessionDto,
   ) {
     return this.checkoutService.createSession(userId, createSessionDto);
+  }
+
+  @Post('guest-session')
+  @ApiOperation({ summary: 'Create payment session and order without authentication (guest checkout)' })
+  @ApiResponse({ status: 201, description: 'Guest payment session created' })
+  async createGuestSession(@Body() guestSessionDto: GuestSessionDto) {
+    return this.checkoutService.createGuestSession(guestSessionDto);
   }
 }

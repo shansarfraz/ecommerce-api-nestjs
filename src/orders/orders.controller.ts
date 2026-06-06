@@ -21,6 +21,7 @@ import {
   UpdateFulfillmentStatusDto,
   CancelOrderDto,
   ReturnOrderDto,
+  ReviewReturnDto,
 } from './dto/order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -82,6 +83,23 @@ export class OrdersController {
     @Body() dto: ReturnOrderDto,
   ) {
     return this.ordersService.returnOrder(userId, id, dto);
+  }
+
+  @Get('orders/:id/return')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get return request for an order' })
+  async getReturn(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.ordersService.getReturnRequest(userId, id);
+  }
+
+  @Patch('admin/returns/:returnId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Approve or reject a return request' })
+  async reviewReturn(@Param('returnId') returnId: string, @Body() dto: ReviewReturnDto) {
+    return this.ordersService.adminReviewReturn(returnId, dto);
   }
 
   // Vendor endpoints
