@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Order } from '../../orders/entities/order.entity';
 import { Vendor } from '../../vendors/entities/vendor.entity';
@@ -15,9 +16,11 @@ export enum PaymentProviderStatus {
   COMPLETED = 'completed',
   FAILED = 'failed',
   REFUNDED = 'refunded',
+  PARTIALLY_REFUNDED = 'partially_refunded',
 }
 
 @Entity('payments')
+@Index(['providerIntentId'])
 export class Payment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -35,8 +38,14 @@ export class Payment {
   @Column({ nullable: true })
   providerSessionId: string;
 
+  @Column({ nullable: true })
+  providerIntentId: string;
+
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   amount: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  refundedAmount: number;
 
   @Column({
     type: 'enum',

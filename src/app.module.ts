@@ -14,6 +14,11 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { WishlistModule } from './wishlist/wishlist.module';
 import { ContentModule } from './content/content.module';
 import { AdminModule } from './admin/admin.module';
+import { PromotionsModule } from './promotions/promotions.module';
+import { ShippingModule } from './shipping/shipping.module';
+import { TaxModule } from './tax/tax.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { CommissionsModule } from './commissions/commissions.module';
 
 @Module({
   imports: [
@@ -24,13 +29,18 @@ import { AdminModule } from './admin/admin.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: configService.get('DB_HOST', 'db.yfdndgwsdlmsglllvtxt.supabase.co'),
-        port: configService.get('DB_PORT', 5432),
-        username: configService.get('DB_USER', 'postgres'),
-        password: configService.get('DB_PASS', 'mnRegUfEjzUkk5wk'),
-        database: configService.get('DB_NAME', 'postgres'),
+        host: configService.get<string>('DB_HOST'),
+        port: configService.get<number>('DB_PORT', 5432),
+        username: configService.get<string>('DB_USER'),
+        password: configService.get<string>('DB_PASS'),
+        database: configService.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize:
+          configService.get<string>('TYPEORM_SYNC', 'false') === 'true',
+        migrationsRun:
+          configService.get<string>('TYPEORM_MIGRATIONS_RUN', 'true') ===
+          'true',
+        migrations: [__dirname + '/database/migrations/*.{ts,js}'],
         ssl: {
           rejectUnauthorized: false,
         },
@@ -50,6 +60,11 @@ import { AdminModule } from './admin/admin.module';
     WishlistModule,
     ContentModule,
     AdminModule,
+    PromotionsModule,
+    ShippingModule,
+    TaxModule,
+    NotificationsModule,
+    CommissionsModule,
   ],
 })
 export class AppModule {}

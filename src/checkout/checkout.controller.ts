@@ -6,7 +6,11 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { CheckoutService } from './checkout.service';
-import { ApplyCouponDto, CreateSessionDto } from './dto/checkout.dto';
+import {
+  ApplyCouponDto,
+  CreateSessionDto,
+  SummaryQueryDto,
+} from './dto/checkout.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -20,8 +24,15 @@ export class CheckoutController {
   @Post('summary')
   @ApiOperation({ summary: 'Get checkout summary grouped by vendor' })
   @ApiResponse({ status: 200, description: 'Checkout summary retrieved' })
-  async getSummary(@CurrentUser('id') userId: string) {
-    return this.checkoutService.getSummary(userId);
+  async getSummary(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SummaryQueryDto = {},
+  ) {
+    return this.checkoutService.getSummary(
+      userId,
+      dto.shippingAddress,
+      dto.couponCode,
+    );
   }
 
   @Post('apply-coupon')

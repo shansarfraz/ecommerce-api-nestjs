@@ -8,8 +8,9 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   RegisterDto,
   LoginDto,
@@ -23,6 +24,7 @@ export class AuthService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private jwtService: JwtService,
+    private notifications: NotificationsService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -106,7 +108,7 @@ export class AuthService {
     });
 
     if (user) {
-      const resetToken = uuidv4();
+      const resetToken = randomUUID();
       const resetExpires = new Date();
       resetExpires.setHours(resetExpires.getHours() + 1);
 
@@ -115,8 +117,12 @@ export class AuthService {
         resetPasswordExpires: resetExpires,
       });
 
-      // In production, send email with reset link
-      // For now, just return success
+      await this.notifications.send({
+        template: 'auth.password_reset',
+        to: user.email,
+        subject: 'Reset your password',
+        data: { resetToken, expiresAt: resetExpires.toISOString() },
+      });
     }
 
     return { message: 'If the email exists, a reset link has been sent' };

@@ -4,9 +4,19 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { Cart, CartItem } from '../cart/entities/cart.entity';
 import { Order, OrderItem } from '../orders/entities/order.entity';
+import { PromotionsModule } from '../promotions/promotions.module';
+import { ShippingModule } from '../shipping/shipping.module';
+import { TaxModule } from '../tax/tax.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Cart, CartItem, Order, OrderItem])],
+  imports: [
+    TypeOrmModule.forFeature([Cart, CartItem, Order, OrderItem]),
+    PromotionsModule,
+    ShippingModule,
+    TaxModule,
+    PaymentsModule,
+  ],
   controllers: [CheckoutController],
   providers: [CheckoutService],
   exports: [CheckoutService],

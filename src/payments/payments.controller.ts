@@ -7,6 +7,11 @@ import {
   Query,
   UseGuards,
   ForbiddenException,
+  Req,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,31 +19,65 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { Request } from 'express';
 import { PaymentsService } from './payments.service';
-import { RefundDto, PayoutRequestDto, PayoutQueryDto, WebhookDto } from './dto/payment.dto';
+import {
+  RefundDto,
+  PayoutRequestDto,
+  PayoutQueryDto,
+  ConfirmIntentDto,
+} from './dto/payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../users/entities/user.entity';
+import {
+  PAYMENT_PROVIDER,
+  PaymentProvider,
+} from './providers/payment-provider.interface';
 
 @ApiTags('Payments')
 @Controller()
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    @Inject(PAYMENT_PROVIDER)
+    private readonly provider: PaymentProvider,
+  ) {}
 
   @Post('payments/webhook')
-  @ApiOperation({ summary: 'Payment provider webhook' })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Payment provider webhook (signed)' })
   @ApiResponse({ status: 200, description: 'Webhook processed' })
-  async webhook(@Body() dto: WebhookDto) {
-    return this.paymentsService.handleWebhook(dto);
+  async webhook(
+    @Req() req: Request,
+    @Headers('x-payment-signature') signature: string,
+  ) {
+    const raw =
+      (req as any).rawBody?.toString('utf8') ??
+      JSON.stringify((req as any).body ?? {});
+    return this.paymentsService.handleWebhook(raw, signature);
+  }
+
+  @Post('payments/intents/:intentId/confirm')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirm a payment intent (mock driver)' })
+  async confirm(
+    @Param('intentId') intentId: string,
+    @Body() dto: ConfirmIntentDto,
+  ) {
+    return this.provider.confirmIntent({
+      intentId,
+      outcome: dto.outcome ?? 'succeed',
+    });
   }
 
   @Get('payments/:orderId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get payment info for order' })
-  @ApiResponse({ status: 200, description: 'Payment info retrieved' })
   async getPayment(@Param('orderId') orderId: string) {
     return this.paymentsService.getPaymentForOrder(orderId);
   }
@@ -48,18 +87,15 @@ export class PaymentsController {
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create refund' })
-  @ApiResponse({ status: 200, description: 'Refund processed' })
   async refund(@Param('orderId') orderId: string, @Body() dto: RefundDto) {
     return this.paymentsService.refund(orderId, dto);
   }
 
-  // Vendor payout endpoints
   @Get('vendor/payouts')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.VENDOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get vendor payout history' })
-  @ApiResponse({ status: 200, description: 'Payouts retrieved' })
   async getVendorPayouts(
     @CurrentUser('id') userId: string,
     @Query() query: PayoutQueryDto,
@@ -76,7 +112,6 @@ export class PaymentsController {
   @Roles(UserRole.VENDOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Request payout' })
-  @ApiResponse({ status: 201, description: 'Payout requested' })
   async requestPayout(
     @CurrentUser('id') userId: string,
     @Body() dto: PayoutRequestDto,

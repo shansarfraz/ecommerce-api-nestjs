@@ -5,9 +5,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Order, OrderItem, OrderStatus, FulfillmentStatus } from './entities/order.entity';
+import { DataSource, Repository } from 'typeorm';
+import { Order, OrderItem, OrderStatus, FulfillmentStatus, PaymentStatus } from './entities/order.entity';
 import { Vendor, VendorStatus } from '../vendors/entities/vendor.entity';
+import { Product, ProductVariant } from '../products/entities/product.entity';
+import { CommissionsService } from '../commissions/commissions.service';
 import {
   OrderQueryDto,
   UpdateOrderStatusDto,
@@ -25,7 +27,26 @@ export class OrdersService {
     private orderItemsRepository: Repository<OrderItem>,
     @InjectRepository(Vendor)
     private vendorsRepository: Repository<Vendor>,
+    private readonly dataSource: DataSource,
+    private readonly commissions: CommissionsService,
   ) {}
+
+  private async restoreStock(manager: any, orderId: string) {
+    const items = await manager
+      .getRepository(OrderItem)
+      .find({ where: { orderId } });
+    for (const item of items) {
+      if (item.variantId) {
+        await manager
+          .getRepository(ProductVariant)
+          .increment({ id: item.variantId }, 'stock', item.quantity);
+      } else {
+        await manager
+          .getRepository(Product)
+          .increment({ id: item.productId }, 'stock', item.quantity);
+      }
+    }
+  }
 
   // Customer methods
   async findAllForUser(userId: string, query: OrderQueryDto) {
@@ -76,9 +97,13 @@ export class OrdersService {
       throw new BadRequestException('Order cannot be cancelled at this stage');
     }
 
-    await this.ordersRepository.update(orderId, {
-      status: OrderStatus.CANCELLED,
-      notes: dto.reason,
+    await this.dataSource.transaction(async (manager) => {
+      await this.restoreStock(manager, orderId);
+      await this.commissions.reverseForOrder(manager, orderId);
+      await manager.getRepository(Order).update(orderId, {
+        status: OrderStatus.CANCELLED,
+        notes: dto.reason,
+      });
     });
 
     return this.findOneForUser(userId, orderId);

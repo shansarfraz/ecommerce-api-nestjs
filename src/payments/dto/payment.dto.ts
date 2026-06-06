@@ -43,3 +43,10 @@ export class WebhookDto {
   @IsObject()
   data: any;
 }
+
+export class ConfirmIntentDto {
+  @ApiProperty({ required: false, enum: ['succeed', 'fail'], default: 'succeed' })
+  @IsOptional()
+  @IsString()
+  outcome?: 'succeed' | 'fail';
+}
