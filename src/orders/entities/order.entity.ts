@@ -11,6 +11,9 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Product, ProductVariant } from '../../products/entities/product.entity';
 import { Vendor } from '../../vendors/entities/vendor.entity';
+import { Shipment } from './shipment.entity';
+export { FulfillmentStatus } from './fulfillment-status.enum';
+import { FulfillmentStatus } from './fulfillment-status.enum';
 
 export enum OrderStatus {
   PENDING = 'pending',
@@ -28,14 +31,6 @@ export enum PaymentStatus {
   FAILED = 'failed',
   REFUNDED = 'refunded',
   PARTIALLY_REFUNDED = 'partially_refunded',
-}
-
-export enum FulfillmentStatus {
-  PENDING = 'pending',
-  PACKED = 'packed',
-  SHIPPED = 'shipped',
-  DELIVERED = 'delivered',
-  RETURNED = 'returned',
 }
 
 @Entity('orders')
@@ -94,6 +89,9 @@ export class Order {
 
   @OneToMany(() => OrderItem, (item) => item.order)
   items: OrderItem[];
+
+  @OneToMany(() => Shipment, (s) => s.order)
+  shipments: Shipment[];
 
   @CreateDateColumn()
   createdAt: Date;

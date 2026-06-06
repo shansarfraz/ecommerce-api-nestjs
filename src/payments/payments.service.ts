@@ -13,6 +13,7 @@ import {
   PaymentProviderStatus,
   PayoutStatus,
 } from './entities/payment.entity';
+import { SavedPaymentMethod } from './entities/saved-payment-method.entity';
 import { Order, PaymentStatus } from '../orders/entities/order.entity';
 import { Vendor, VendorStatus } from '../vendors/entities/vendor.entity';
 import {
@@ -27,6 +28,7 @@ import {
 } from './providers/payment-provider.interface';
 import { CommissionsService } from '../commissions/commissions.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { JobsService } from '../jobs/jobs.service';
 
 @Injectable()
 export class PaymentsService {
@@ -41,11 +43,14 @@ export class PaymentsService {
     private ordersRepository: Repository<Order>,
     @InjectRepository(Vendor)
     private vendorsRepository: Repository<Vendor>,
+    @InjectRepository(SavedPaymentMethod)
+    private savedMethodsRepository: Repository<SavedPaymentMethod>,
     @Inject(PAYMENT_PROVIDER)
     private readonly provider: PaymentProvider,
     private readonly dataSource: DataSource,
     private readonly commissions: CommissionsService,
     private readonly notifications: NotificationsService,
+    private readonly jobs: JobsService,
   ) {}
 
   /**
@@ -111,34 +116,47 @@ export class PaymentsService {
 
   private async markPaid(providerIntentId: string) {
     if (!providerIntentId) return;
+    let orderId: string | null = null;
+    let userEmail: string | null = null;
+    let orderTotal: any = null;
+
     await this.dataSource.transaction(async (manager) => {
       const payment = await manager
         .getRepository(Payment)
         .findOne({ where: { providerIntentId } });
-      if (!payment || payment.status === PaymentProviderStatus.COMPLETED) {
-        return;
-      }
+      if (!payment || payment.status === PaymentProviderStatus.COMPLETED) return;
       payment.status = PaymentProviderStatus.COMPLETED;
       await manager.getRepository(Payment).save(payment);
+      await manager.getRepository(Order).update(payment.orderId, { paymentStatus: PaymentStatus.PAID });
+      orderId = payment.orderId;
 
-      await manager
-        .getRepository(Order)
-        .update(payment.orderId, { paymentStatus: PaymentStatus.PAID });
-
-      await this.commissions.accrueForPaidOrder(manager, payment.orderId);
+      await this.commissions.accrueForPaidOrder(manager, orderId);
 
       const order = await manager
         .getRepository(Order)
         .findOne({ where: { id: payment.orderId }, relations: ['user'] });
-      if (order?.user?.email) {
+      userEmail = order?.user?.email ?? order?.guestEmail ?? null;
+      orderTotal = order?.total;
+    });
+
+    if (orderId && userEmail) {
+      try {
+        await this.jobs.enqueueNotification({
+          template: 'order.paid',
+          to: userEmail,
+          subject: `Payment received for order ${orderId}`,
+          data: { orderId, amount: orderTotal },
+        });
+      } catch (e) {
+        this.logger.warn(`Could not enqueue notification job: ${e}. Running synchronously.`);
         await this.notifications.send({
           template: 'order.paid',
-          to: order.user.email,
-          subject: `Payment received for order ${order.id}`,
-          data: { orderId: order.id, amount: order.total },
+          to: userEmail,
+          subject: `Payment received for order ${orderId}`,
+          data: { orderId, amount: orderTotal },
         });
       }
-    });
+    }
   }
 
   private async markFailed(providerIntentId: string) {
@@ -283,6 +301,35 @@ export class PaymentsService {
     return this.vendorsRepository.findOne({
       where: { ownerId: userId, status: VendorStatus.APPROVED },
     });
+  }
+
+  // Saved payment methods
+  async getSavedPaymentMethods(userId: string) {
+    return this.savedMethodsRepository.find({
+      where: { userId },
+      order: { isDefault: 'DESC', createdAt: 'DESC' },
+    });
+  }
+
+  async savePaymentMethod(userId: string, dto: { providerMethodId: string; type?: string; details?: object; setDefault?: boolean }) {
+    if (dto.setDefault) {
+      await this.savedMethodsRepository.update({ userId }, { isDefault: false });
+    }
+    const method = this.savedMethodsRepository.create({
+      userId,
+      providerMethodId: dto.providerMethodId,
+      type: dto.type ?? 'card',
+      details: dto.details ?? {},
+      isDefault: dto.setDefault ?? false,
+    });
+    return this.savedMethodsRepository.save(method);
+  }
+
+  async deleteSavedPaymentMethod(userId: string, methodId: string) {
+    const method = await this.savedMethodsRepository.findOne({ where: { id: methodId, userId } });
+    if (!method) throw new NotFoundException('Payment method not found');
+    await this.savedMethodsRepository.delete(methodId);
+    return { deleted: true };
   }
 
   // Admin payout methods

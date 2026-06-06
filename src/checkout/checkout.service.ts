@@ -11,7 +11,9 @@ import {
   OrderItem,
   OrderStatus,
   PaymentStatus,
+  FulfillmentStatus,
 } from '../orders/entities/order.entity';
+import { Shipment } from '../orders/entities/shipment.entity';
 import { Product, ProductVariant } from '../products/entities/product.entity';
 import { User } from '../users/entities/user.entity';
 import { ApplyCouponDto, CreateSessionDto, GuestSessionDto } from './dto/checkout.dto';
@@ -355,6 +357,20 @@ export class CheckoutService {
         );
         await manager.getRepository(OrderItem).save(orderItems);
 
+        // 4b. Create per-vendor shipments
+        const shipmentEntities = groups.map((g) => {
+          const vendorShipping = shippingByVendor.find((q) => q.vendorId === g.vendorId);
+          return manager.getRepository(Shipment).create({
+            orderId: savedOrder.id,
+            vendorId: g.vendorId,
+            shippingCost: vendorShipping?.amount ?? 0,
+            shippingMethodName: vendorShipping?.methodName ?? 'Standard',
+            address: dto.shippingAddress,
+            status: FulfillmentStatus.PENDING,
+          });
+        });
+        await manager.getRepository(Shipment).save(shipmentEntities);
+
         // 5. redeem the coupon now that the order exists
         if (dto.couponCode) {
           await this.promotions.redeem(manager, {
@@ -575,6 +591,20 @@ export class CheckoutService {
         }),
       );
       await manager.getRepository(OrderItem).save(orderItems);
+
+      // 4b. Create per-vendor shipments
+      const shipmentEntities = groups.map((g) => {
+        const vendorShipping = shippingByVendor.find((q) => q.vendorId === g.vendorId);
+        return manager.getRepository(Shipment).create({
+          orderId: savedOrder.id,
+          vendorId: g.vendorId,
+          shippingCost: vendorShipping?.amount ?? 0,
+          shippingMethodName: vendorShipping?.methodName ?? 'Standard',
+          address: dto.shippingAddress,
+          status: FulfillmentStatus.PENDING,
+        });
+      });
+      await manager.getRepository(Shipment).save(shipmentEntities);
 
       // 5. redeem coupon if provided (use guestEmail as userId surrogate)
       if (dto.couponCode) {

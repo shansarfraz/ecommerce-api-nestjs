@@ -3,6 +3,7 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
@@ -23,6 +24,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { CommissionsModule } from './commissions/commissions.module';
 import { HealthModule } from './health/health.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
@@ -30,6 +32,18 @@ import { UploadsModule } from './uploads/uploads.module';
       isGlobal: true,
     }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', '127.0.0.1'),
+          port: config.get<number>('REDIS_PORT', 6379),
+          password: config.get<string>('REDIS_PASSWORD', undefined),
+          tls: config.get<string>('REDIS_TLS', 'false') === 'true' ? {} : undefined,
+        },
+      }),
+      inject: [ConfigService],
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -72,6 +86,7 @@ import { UploadsModule } from './uploads/uploads.module';
     CommissionsModule,
     HealthModule,
     UploadsModule,
+    JobsModule,
   ],
 })
 export class AppModule implements NestModule {

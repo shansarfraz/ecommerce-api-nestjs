@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsObject, IsUUID, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsObject, IsBoolean, IsUUID, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class RefundDto {
@@ -49,4 +49,25 @@ export class ConfirmIntentDto {
   @IsOptional()
   @IsString()
   outcome?: 'succeed' | 'fail';
+}
+
+export class SavePaymentMethodDto {
+  @ApiProperty({ example: 'pm_xxxx' })
+  @IsString()
+  providerMethodId: string;
+
+  @ApiProperty({ required: false, default: 'card' })
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsObject()
+  details?: object;
+
+  @ApiProperty({ required: false, default: false })
+  @IsOptional()
+  @IsBoolean()
+  setDefault?: boolean;
 }

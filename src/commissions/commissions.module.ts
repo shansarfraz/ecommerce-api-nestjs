@@ -6,7 +6,9 @@ import { CommissionEntry } from './entities/commission-entry.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CommissionEntry, Vendor])],
+  imports: [
+    TypeOrmModule.forFeature([CommissionEntry, Vendor]),
+  ],
   controllers: [CommissionsController],
   providers: [CommissionsService],
   exports: [CommissionsService],

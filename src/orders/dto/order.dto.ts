@@ -70,3 +70,20 @@ export class ReviewReturnDto {
   @IsNumber()
   refundAmount?: number;
 }
+
+export class UpdateShipmentDto {
+  @ApiProperty({ required: false, enum: FulfillmentStatus })
+  @IsOptional()
+  @IsEnum(FulfillmentStatus)
+  status?: FulfillmentStatus;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  trackingNumber?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  carrier?: string;
+}

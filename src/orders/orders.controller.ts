@@ -19,6 +19,7 @@ import { OrdersService } from './orders.service';
 import {
   OrderQueryDto,
   UpdateFulfillmentStatusDto,
+  UpdateShipmentDto,
   CancelOrderDto,
   ReturnOrderDto,
   ReviewReturnDto,
@@ -154,5 +155,21 @@ export class OrdersController {
       throw new ForbiddenException('You are not an approved vendor');
     }
     return this.ordersService.updateItemFulfillment(vendor.id, orderId, itemId, dto);
+  }
+
+  @Patch('vendor/orders/:orderId/shipments/:shipmentId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update shipment tracking and status' })
+  async updateShipment(
+    @CurrentUser('id') userId: string,
+    @Param('orderId') orderId: string,
+    @Param('shipmentId') shipmentId: string,
+    @Body() dto: UpdateShipmentDto,
+  ) {
+    const vendor = await this.ordersService.getVendorByUserId(userId);
+    if (!vendor) throw new ForbiddenException('Not an approved vendor');
+    return this.ordersService.updateShipment(vendor.id, orderId, shipmentId, dto);
   }
 }

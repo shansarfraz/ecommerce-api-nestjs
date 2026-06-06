@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -27,6 +28,7 @@ import {
   PayoutRequestDto,
   PayoutQueryDto,
   ConfirmIntentDto,
+  SavePaymentMethodDto,
 } from './dto/payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -131,5 +133,29 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Approve and disburse vendor payout' })
   async approvePayout(@Param('id') id: string) {
     return this.paymentsService.approveAndDisbursePayout(id);
+  }
+
+  @Get('payment-methods')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List saved payment methods' })
+  async getSavedMethods(@CurrentUser('id') userId: string) {
+    return this.paymentsService.getSavedPaymentMethods(userId);
+  }
+
+  @Post('payment-methods')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Save a payment method' })
+  async saveMethod(@CurrentUser('id') userId: string, @Body() dto: SavePaymentMethodDto) {
+    return this.paymentsService.savePaymentMethod(userId, dto);
+  }
+
+  @Delete('payment-methods/:id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a saved payment method' })
+  async deleteMethod(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.paymentsService.deleteSavedPaymentMethod(userId, id);
   }
 }

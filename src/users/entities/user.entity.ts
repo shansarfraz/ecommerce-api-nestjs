@@ -64,6 +64,15 @@ export class User {
   @Column({ default: false })
   emailVerified: boolean;
 
+  @Column({ nullable: true })
+  googleId: string;
+
+  @Column({ nullable: true })
+  avatarUrl: string;
+
+  @Column({ nullable: true })
+  stripeCustomerId: string;
+
   @Column({ default: 0 })
   failedLoginAttempts: number;
 

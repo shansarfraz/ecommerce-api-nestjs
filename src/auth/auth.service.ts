@@ -184,6 +184,38 @@ export class AuthService {
     return { message: 'Password reset successfully' };
   }
 
+  async googleLogin(googleUser: { googleId: string; email: string; firstName: string; lastName: string; avatarUrl?: string }) {
+    let user = await this.usersRepository.findOne({ where: { googleId: googleUser.googleId } });
+
+    if (!user) {
+      // Try to link to existing account by email
+      user = await this.usersRepository.findOne({ where: { email: googleUser.email } });
+      if (user) {
+        await this.usersRepository.update(user.id, {
+          googleId: googleUser.googleId,
+          avatarUrl: googleUser.avatarUrl ?? user.avatarUrl,
+        });
+        user.googleId = googleUser.googleId;
+      } else {
+        // New user via Google
+        user = this.usersRepository.create({
+          googleId: googleUser.googleId,
+          email: googleUser.email,
+          firstName: googleUser.firstName,
+          lastName: googleUser.lastName,
+          avatarUrl: googleUser.avatarUrl,
+          passwordHash: '',
+          roles: [UserRole.CUSTOMER],
+          status: UserStatus.ACTIVE,
+          emailVerified: true,
+        });
+        await this.usersRepository.save(user);
+      }
+    }
+
+    return this.generateTokens(user);
+  }
+
   async getProfile(userId: string) {
     const user = await this.usersRepository.findOne({
       where: { id: userId },

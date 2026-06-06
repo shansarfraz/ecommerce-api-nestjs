@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import {
   ApiTags,
@@ -102,5 +103,19 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify email address' })
   async verifyEmail(@Query('token') token: string) {
     return this.authService.verifyEmail(token);
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Initiate Google OAuth login' })
+  async googleAuth() {
+    // Guard redirects to Google
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google OAuth callback' })
+  async googleCallback(@CurrentUser() user: any) {
+    return this.authService.googleLogin(user);
   }
 }

@@ -9,6 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Order, OrderItem, OrderStatus, FulfillmentStatus, PaymentStatus } from './entities/order.entity';
+import { Shipment } from './entities/shipment.entity';
 import { ReturnRequest, ReturnStatus } from './entities/return-request.entity';
 import { Vendor, VendorStatus } from '../vendors/entities/vendor.entity';
 import { Product, ProductVariant } from '../products/entities/product.entity';
@@ -17,6 +18,7 @@ import {
   OrderQueryDto,
   UpdateOrderStatusDto,
   UpdateFulfillmentStatusDto,
+  UpdateShipmentDto,
   CancelOrderDto,
   ReturnOrderDto,
   ReviewReturnDto,
@@ -36,6 +38,8 @@ export class OrdersService {
     private ordersRepository: Repository<Order>,
     @InjectRepository(OrderItem)
     private orderItemsRepository: Repository<OrderItem>,
+    @InjectRepository(Shipment)
+    private shipmentRepo: Repository<Shipment>,
     @InjectRepository(ReturnRequest)
     private returnRepo: Repository<ReturnRequest>,
     @InjectRepository(Vendor)
@@ -288,6 +292,15 @@ export class OrdersService {
       where: { id: itemId },
       relations: ['product', 'variant'],
     });
+  }
+
+  async updateShipment(vendorId: string, orderId: string, shipmentId: string, dto: UpdateShipmentDto) {
+    const shipment = await this.shipmentRepo.findOne({
+      where: { id: shipmentId, orderId, vendorId },
+    });
+    if (!shipment) throw new NotFoundException('Shipment not found');
+    await this.shipmentRepo.update(shipmentId, dto);
+    return this.shipmentRepo.findOne({ where: { id: shipmentId } });
   }
 
   async getVendorByUserId(userId: string) {
