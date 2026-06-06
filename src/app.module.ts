@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
@@ -19,12 +20,14 @@ import { ShippingModule } from './shipping/shipping.module';
 import { TaxModule } from './tax/tax.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CommissionsModule } from './commissions/commissions.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -65,6 +68,7 @@ import { CommissionsModule } from './commissions/commissions.module';
     TaxModule,
     NotificationsModule,
     CommissionsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

@@ -45,4 +45,9 @@ export class CreateSessionDto {
   @IsOptional()
   @IsString()
   couponCode?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
 }

@@ -37,6 +37,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(registerDto.password, 10);
+    const token = randomUUID();
 
     const user = this.usersRepository.create({
       email: registerDto.email,
@@ -45,11 +46,27 @@ export class AuthService {
       lastName: registerDto.lastName,
       roles: [UserRole.CUSTOMER],
       status: UserStatus.ACTIVE,
+      emailVerificationToken: token,
+      emailVerified: false,
     });
 
     await this.usersRepository.save(user);
 
+    await this.notifications.send({
+      template: 'auth.verify-email',
+      to: user.email,
+      subject: 'Verify your email',
+      data: { token, userId: user.id },
+    });
+
     return this.generateTokens(user);
+  }
+
+  async verifyEmail(token: string) {
+    const user = await this.usersRepository.findOne({ where: { emailVerificationToken: token } });
+    if (!user) throw new BadRequestException('Invalid or expired verification token');
+    await this.usersRepository.update(user.id, { emailVerified: true, emailVerificationToken: null });
+    return { message: 'Email verified successfully' };
   }
 
   async login(loginDto: LoginDto) {

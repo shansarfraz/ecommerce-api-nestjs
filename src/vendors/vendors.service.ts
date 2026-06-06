@@ -159,4 +159,13 @@ export class VendorsService {
       where: { ownerId: userId, status: VendorStatus.APPROVED },
     });
   }
+
+  async getStorefront(slug: string) {
+    const vendor = await this.vendorsRepository.findOne({
+      where: { slug, status: VendorStatus.APPROVED },
+    });
+    if (!vendor) throw new NotFoundException('Store not found');
+    const { commissionRate, ...publicFields } = vendor as any;
+    return publicFields;
+  }
 }

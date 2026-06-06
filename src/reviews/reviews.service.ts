@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Review, ReviewStatus } from './entities/review.entity';
 import { Product } from '../products/entities/product.entity';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { Order, PaymentStatus } from '../orders/entities/order.entity';
 import { CreateReviewDto, UpdateReviewDto, ReviewQueryDto } from './dto/review.dto';
 
 @Injectable()
@@ -90,17 +90,16 @@ export class ReviewsService {
       throw new NotFoundException('Product not found');
     }
 
-    // Check if user has purchased this product (delivered order)
     const hasPurchased = await this.ordersRepository
       .createQueryBuilder('order')
       .leftJoin('order.items', 'item')
       .where('order.userId = :userId', { userId })
       .andWhere('item.productId = :productId', { productId })
-      .andWhere('order.status = :status', { status: OrderStatus.DELIVERED })
+      .andWhere('order.paymentStatus = :paymentStatus', { paymentStatus: PaymentStatus.PAID })
       .getOne();
 
     if (!hasPurchased) {
-      throw new ForbiddenException('You can only review products you have purchased');
+      throw new BadRequestException('You can only review products you have purchased');
     }
 
     // Check if user already reviewed this product

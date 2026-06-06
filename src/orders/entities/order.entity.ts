@@ -68,6 +68,12 @@ export class Order {
   @Column({ type: 'jsonb', nullable: true })
   billingAddress: object;
 
+  @Column({ nullable: true, unique: true })
+  idempotencyKey: string;
+
+  @Column({ nullable: true })
+  orderNumber: string;
+
   @Column({ nullable: true })
   notes: string;
 

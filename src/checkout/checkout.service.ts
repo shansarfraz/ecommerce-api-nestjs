@@ -19,6 +19,7 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { ShippingService } from '../shipping/shipping.service';
 import { TaxService } from '../tax/tax.service';
 import { PaymentsService } from '../payments/payments.service';
+import { Payment } from '../payments/entities/payment.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 
 interface VendorGroup {
@@ -181,6 +182,25 @@ export class CheckoutService {
    *   6. create a payment intent with the provider.
    */
   async createSession(userId: string, dto: CreateSessionDto) {
+    if (dto.idempotencyKey) {
+      const existing = await this.ordersRepository.findOne({
+        where: { idempotencyKey: dto.idempotencyKey },
+      });
+      if (existing) {
+        const payment = await this.cartsRepository.manager
+          .getRepository(Payment)
+          .findOne({ where: { orderId: existing.id } });
+        return {
+          orderId: existing.id,
+          paymentIntentId: payment?.providerIntentId ?? null,
+          clientSecret: (payment?.metadata as any)?.clientSecret ?? null,
+          total: existing.total,
+          currency: existing.currency,
+          status: existing.status,
+        };
+      }
+    }
+
     const cart = await this.cartsRepository.findOne({
       where: { userId },
       relations: ['items', 'items.product', 'items.variant', 'items.vendor'],
@@ -260,9 +280,18 @@ export class CheckoutService {
                 `Insufficient stock for ${product.title}`,
               );
             }
+            const newStock = product.stock - item.quantity;
             await manager
               .getRepository(Product)
-              .update(product.id, { stock: product.stock - item.quantity });
+              .update(product.id, { stock: newStock });
+            if (newStock <= 5) {
+              await this.notifications.send({
+                template: 'product.low-stock',
+                to: 'admin@marketplace.com',
+                subject: `Low stock alert: ${product.title}`,
+                data: { productId: product.id, title: product.title, stock: newStock },
+              });
+            }
           }
         }
 
@@ -305,8 +334,13 @@ export class CheckoutService {
           discountAmount: discount,
           shippingCost: totalShipping,
           taxAmount: taxCalc.amount,
+          idempotencyKey: dto.idempotencyKey ?? null,
         });
         const savedOrder = await manager.getRepository(Order).save(order);
+
+        const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        await manager.getRepository(Order).update(savedOrder.id, { orderNumber });
+        savedOrder.orderNumber = orderNumber;
 
         const orderItems = cart.items.map((item) =>
           manager.getRepository(OrderItem).create({

@@ -63,6 +63,12 @@ export class VendorsController {
     return this.vendorsService.updateMyVendor(userId, updateVendorDto);
   }
 
+  @Get('stores/:slug')
+  @ApiOperation({ summary: 'Get vendor storefront by slug' })
+  async getStorefront(@Param('slug') slug: string) {
+    return this.vendorsService.getStorefront(slug);
+  }
+
   @Get(':slug')
   @ApiOperation({ summary: 'Get public vendor store info' })
   @ApiResponse({ status: 200, description: 'Vendor info retrieved' })
