@@ -29,7 +29,7 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Multi-Vendor Ecommerce API')
-    .setDescription('NestJS Multi-Vendor Ecommerce API with Supabase')
+    .setDescription('NestJS Multi-Vendor Ecommerce API on PostgreSQL (Neon)')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

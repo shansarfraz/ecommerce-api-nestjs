@@ -1,7 +1,7 @@
 {
   "name": "ecommerce-api-nestjs",
   "version": "1.0.0",
-  "description": "Multi-vendor ecommerce API built with NestJS and Supabase",
+  "description": "Multi-vendor ecommerce API built with NestJS and PostgreSQL (Neon)",
   "main": "dist/main.js",
   "scripts": {
     "build": "nest build",
@@ -23,7 +23,8 @@
     "nestjs",
     "ecommerce",
     "multi-vendor",
-    "supabase",
+    "neon",
+    "postgresql",
     "typescript"
   ],
   "author": "",
