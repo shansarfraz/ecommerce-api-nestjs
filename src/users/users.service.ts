@@ -7,11 +7,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
+import { Address } from './entities/address.entity';
 import {
   UpdateProfileDto,
   ChangePasswordDto,
   AdminUpdateUserDto,
   UserQueryDto,
+  CreateAddressDto,
+  UpdateAddressDto,
 } from './dto/user.dto';
 
 @Injectable()
@@ -19,6 +22,8 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Address)
+    private addressesRepository: Repository<Address>,
   ) {}
 
   async findAll(query: UserQueryDto) {
@@ -133,5 +138,39 @@ export class UsersService {
 
   async findByEmail(email: string) {
     return this.usersRepository.findOne({ where: { email } });
+  }
+
+  async getAddresses(userId: string) {
+    return this.addressesRepository.find({
+      where: { userId },
+      order: { isDefault: 'DESC', createdAt: 'ASC' },
+    });
+  }
+
+  async createAddress(userId: string, dto: CreateAddressDto) {
+    if (dto.isDefault) {
+      await this.addressesRepository.update({ userId }, { isDefault: false });
+    }
+    const address = this.addressesRepository.create({ ...dto, userId });
+    return this.addressesRepository.save(address);
+  }
+
+  async updateAddress(userId: string, addressId: string, dto: UpdateAddressDto) {
+    const address = await this.addressesRepository.findOne({ where: { id: addressId, userId } });
+    if (!address) throw new NotFoundException('Address not found');
+
+    if (dto.isDefault) {
+      await this.addressesRepository.update({ userId }, { isDefault: false });
+    }
+
+    await this.addressesRepository.update(addressId, dto);
+    return this.addressesRepository.findOne({ where: { id: addressId } });
+  }
+
+  async deleteAddress(userId: string, addressId: string) {
+    const address = await this.addressesRepository.findOne({ where: { id: addressId, userId } });
+    if (!address) throw new NotFoundException('Address not found');
+    await this.addressesRepository.delete(addressId);
+    return { message: 'Address deleted successfully' };
   }
 }

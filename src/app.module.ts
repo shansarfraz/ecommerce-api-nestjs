@@ -26,6 +26,7 @@ import { HealthModule } from './health/health.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { JobsModule } from './jobs/jobs.module';
 import { StoreCreditsModule } from './store-credits/store-credits.module';
+import { SearchModule } from './search/search.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { StoreCreditsModule } from './store-credits/store-credits.module';
     UploadsModule,
     JobsModule,
     StoreCreditsModule,
+    SearchModule,
   ],
 })
 export class AppModule implements NestModule {

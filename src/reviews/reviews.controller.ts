@@ -18,7 +18,38 @@ import {
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto, UpdateReviewDto, ReviewQueryDto } from './dto/review.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../users/entities/user.entity';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ReviewStatus } from './entities/review.entity';
+
+@ApiTags('Admin Reviews')
+@Controller('admin/reviews')
+export class AdminReviewsController {
+  constructor(private readonly reviewsService: ReviewsService) {}
+
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List all reviews (admin)' })
+  async listAll(@Query() query: { status?: string; page?: number; limit?: number }) {
+    return this.reviewsService.findAllAdmin(query);
+  }
+
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Approve or reject a review' })
+  async moderate(
+    @Param('id') id: string,
+    @Body('status') status: ReviewStatus,
+  ) {
+    return this.reviewsService.moderateReview(id, status);
+  }
+}
 
 @ApiTags('Reviews')
 @Controller('products/:productId')

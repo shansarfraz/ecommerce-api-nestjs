@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsEnum,
   IsArray,
+  IsBoolean,
   MinLength,
 } from 'class-validator';
 import { UserRole, UserStatus } from '../entities/user.entity';
@@ -59,6 +60,54 @@ export class AdminUpdateUserDto {
   @IsString()
   lastName?: string;
 }
+
+export class CreateAddressDto {
+  @ApiProperty()
+  @IsString()
+  firstName: string;
+
+  @ApiProperty()
+  @IsString()
+  lastName: string;
+
+  @ApiProperty()
+  @IsString()
+  line1: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  line2?: string;
+
+  @ApiProperty()
+  @IsString()
+  city: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @ApiProperty()
+  @IsString()
+  postalCode: string;
+
+  @ApiProperty()
+  @IsString()
+  country: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiProperty({ required: false, default: false })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+}
+
+export class UpdateAddressDto extends PartialType(CreateAddressDto) {}
 
 export class UserQueryDto {
   @ApiProperty({ required: false })

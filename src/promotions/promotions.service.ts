@@ -68,6 +68,41 @@ export class PromotionsService {
     return { deleted: true };
   }
 
+  async getAnalytics(id: string) {
+    const promotion = await this.promotionsRepo.findOne({ where: { id } });
+    if (!promotion) throw new NotFoundException('Promotion not found');
+
+    const redemptions = await this.redemptionsRepo.find({
+      where: { promotionId: id },
+      order: { createdAt: 'DESC' },
+    });
+
+    const totalDiscount = redemptions.reduce(
+      (sum, r) => sum + Number(r.discountAmount),
+      0,
+    );
+
+    const dailyUsage: Record<string, number> = {};
+    for (const r of redemptions) {
+      const day = r.createdAt.toISOString().split('T')[0];
+      dailyUsage[day] = (dailyUsage[day] ?? 0) + 1;
+    }
+
+    return {
+      promotion: {
+        id: promotion.id,
+        code: promotion.code,
+        type: promotion.type,
+        value: promotion.value,
+        usageCount: promotion.usageCount,
+        usageLimit: promotion.usageLimit,
+      },
+      totalRedemptions: redemptions.length,
+      totalDiscountGiven: Math.round(totalDiscount * 100) / 100,
+      dailyUsage,
+    };
+  }
+
   /**
    * Validate a coupon code against an order context. Returns the resolved
    * discount (and whether shipping is free) without recording usage.

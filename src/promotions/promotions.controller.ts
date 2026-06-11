@@ -47,4 +47,10 @@ export class PromotionsController {
   remove(@Param('id') id: string) {
     return this.svc.remove(id);
   }
+
+  @Get(':id/analytics')
+  @ApiOperation({ summary: 'Get usage analytics for a promotion' })
+  analytics(@Param('id') id: string) {
+    return this.svc.getAnalytics(id);
+  }
 }

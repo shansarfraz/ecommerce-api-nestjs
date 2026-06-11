@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -67,6 +68,24 @@ export class AuthService {
     if (!user) throw new BadRequestException('Invalid or expired verification token');
     await this.usersRepository.update(user.id, { emailVerified: true, emailVerificationToken: null });
     return { message: 'Email verified successfully' };
+  }
+
+  async resendVerificationEmail(userId: string) {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.emailVerified) throw new BadRequestException('Email is already verified');
+
+    const token = randomUUID();
+    await this.usersRepository.update(userId, { emailVerificationToken: token });
+
+    await this.notifications.send({
+      template: 'auth.verify-email',
+      to: user.email,
+      subject: 'Verify your email',
+      data: { token, userId: user.id },
+    });
+
+    return { message: 'Verification email sent' };
   }
 
   async login(loginDto: LoginDto) {

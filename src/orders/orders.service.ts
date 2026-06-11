@@ -115,6 +115,19 @@ export class OrdersService {
     return order;
   }
 
+  async findGuestOrder(orderNumber: string, email: string) {
+    const order = await this.ordersRepository.findOne({
+      where: { orderNumber, guestEmail: email },
+      relations: ['items', 'items.product', 'items.variant', 'items.vendor'],
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    return order;
+  }
+
   async cancelOrder(userId: string, orderId: string, dto: CancelOrderDto) {
     const order = await this.findOneForUser(userId, orderId);
 

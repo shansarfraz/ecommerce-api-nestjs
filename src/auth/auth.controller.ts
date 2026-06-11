@@ -105,6 +105,16 @@ export class AuthController {
     return this.authService.verifyEmail(token);
   }
 
+  @Post('resend-verification')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend email verification link' })
+  @ApiResponse({ status: 200, description: 'Verification email sent' })
+  async resendVerification(@CurrentUser('id') userId: string) {
+    return this.authService.resendVerificationEmail(userId);
+  }
+
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Initiate Google OAuth login' })

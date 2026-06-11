@@ -198,4 +198,50 @@ export class ProductsController {
     if (!vendor) throw new ForbiddenException('You are not an approved vendor');
     return this.productsService.getImageUploadUrl(productId, vendor.id, contentType);
   }
+
+  @Post('vendor/products/:id/images')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add an image to a product (after upload)' })
+  async addImage(
+    @CurrentUser('id') userId: string,
+    @Param('id') productId: string,
+    @Body('url') url: string,
+    @Body('altText') altText?: string,
+  ) {
+    const vendor = await this.productsService.getVendorByUserId(userId);
+    if (!vendor) throw new ForbiddenException('You are not an approved vendor');
+    return this.productsService.addImage(productId, vendor.id, url, altText);
+  }
+
+  @Delete('vendor/products/:id/images/:imageId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a product image' })
+  async deleteImage(
+    @CurrentUser('id') userId: string,
+    @Param('id') productId: string,
+    @Param('imageId') imageId: string,
+  ) {
+    const vendor = await this.productsService.getVendorByUserId(userId);
+    if (!vendor) throw new ForbiddenException('You are not an approved vendor');
+    return this.productsService.deleteImage(productId, vendor.id, imageId);
+  }
+
+  @Patch('vendor/products/:id/images/reorder')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reorder product images' })
+  async reorderImages(
+    @CurrentUser('id') userId: string,
+    @Param('id') productId: string,
+    @Body('imageIds') imageIds: string[],
+  ) {
+    const vendor = await this.productsService.getVendorByUserId(userId);
+    if (!vendor) throw new ForbiddenException('You are not an approved vendor');
+    return this.productsService.reorderImages(productId, vendor.id, imageIds);
+  }
 }

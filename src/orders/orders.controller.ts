@@ -38,6 +38,17 @@ export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   // Customer endpoints
+  @Get('orders/guest')
+  @ApiOperation({ summary: 'Track a guest order by order number and email' })
+  @ApiResponse({ status: 200, description: 'Order retrieved' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  async findGuestOrder(
+    @Query('orderNumber') orderNumber: string,
+    @Query('email') email: string,
+  ) {
+    return this.ordersService.findGuestOrder(orderNumber, email);
+  }
+
   @Get('orders')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

@@ -170,6 +170,39 @@ export class ReviewsService {
     return { message: 'Review deleted successfully' };
   }
 
+  async findAllAdmin(query: { status?: string; page?: number; limit?: number }) {
+    const { status, page = 1, limit = 20 } = query;
+
+    const where: any = {};
+    if (status) where.status = status;
+
+    const [reviews, total] = await this.reviewsRepository.findAndCount({
+      where,
+      relations: ['user', 'product'],
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      data: reviews,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async moderateReview(reviewId: string, status: ReviewStatus) {
+    const review = await this.reviewsRepository.findOne({ where: { id: reviewId } });
+    if (!review) throw new NotFoundException('Review not found');
+
+    await this.reviewsRepository.update(reviewId, { status });
+    await this.updateProductRating(review.productId);
+
+    return this.reviewsRepository.findOne({ where: { id: reviewId } });
+  }
+
   private async updateProductRating(productId: string) {
     const result = await this.reviewsRepository
       .createQueryBuilder('review')

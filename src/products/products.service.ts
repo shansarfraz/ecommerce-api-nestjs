@@ -368,4 +368,50 @@ export class ProductsService {
     const key = `products/${productId}/${crypto.randomUUID()}.${ext}`;
     return this.uploads.getPresignedUploadUrl({ key, contentType });
   }
+
+  async addImage(productId: string, vendorId: string, url: string, altText?: string) {
+    const product = await this.findOne(productId);
+    if (product.vendorId !== vendorId) throw new ForbiddenException('Not your product');
+
+    const maxPosition = await this.imagesRepository
+      .createQueryBuilder('img')
+      .select('MAX(img.position)', 'max')
+      .where('img.productId = :productId', { productId })
+      .getRawOne();
+
+    const image = this.imagesRepository.create({
+      productId,
+      url,
+      altText,
+      position: (maxPosition?.max ?? -1) + 1,
+    });
+    return this.imagesRepository.save(image);
+  }
+
+  async deleteImage(productId: string, vendorId: string, imageId: string) {
+    const product = await this.findOne(productId);
+    if (product.vendorId !== vendorId) throw new ForbiddenException('Not your product');
+
+    const image = await this.imagesRepository.findOne({ where: { id: imageId, productId } });
+    if (!image) throw new NotFoundException('Image not found');
+
+    await this.imagesRepository.delete(imageId);
+    return { message: 'Image deleted' };
+  }
+
+  async reorderImages(productId: string, vendorId: string, orderedIds: string[]) {
+    const product = await this.findOne(productId);
+    if (product.vendorId !== vendorId) throw new ForbiddenException('Not your product');
+
+    await Promise.all(
+      orderedIds.map((id, position) =>
+        this.imagesRepository.update({ id, productId }, { position }),
+      ),
+    );
+
+    return this.imagesRepository.find({
+      where: { productId },
+      order: { position: 'ASC' },
+    });
+  }
 }
